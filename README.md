@@ -1,38 +1,96 @@
-[![progress-banner](https://backend.codecrafters.io/progress/http-server/81c69889-6a9a-4e8b-9ff5-090ce7ff6a57)](https://app.codecrafters.io/users/codecrafters-bot?r=2qF)
+# HTTP Server in Java
 
-This is a starting point for Java solutions to the
-["Build Your Own HTTP server" Challenge](https://app.codecrafters.io/courses/http-server/overview).
+A simple HTTP server implementation in Java that listens on port 4221 and handles basic HTTP requests.
 
-[HTTP](https://en.wikipedia.org/wiki/Hypertext_Transfer_Protocol) is the
-protocol that powers the web. In this challenge, you'll build a HTTP/1.1 server
-that is capable of serving multiple clients.
+## Prerequisites
 
-Along the way you'll learn about TCP servers,
-[HTTP request syntax](https://www.w3.org/Protocols/rfc2616/rfc2616-sec5.html),
-and more.
+- Java 21 or higher
+- Maven 3.6 or higher
 
-**Note**: If you're viewing this repo on GitHub, head over to
-[codecrafters.io](https://codecrafters.io) to try the challenge.
+## Project Structure
 
-# Passing the first stage
-
-The entry point for your HTTP server implementation is in
-`src/main/java/Main.java`. Study and uncomment the relevant code, and push your
-changes to pass the first stage:
-
-```sh
-git commit -am "pass 1st stage" # any msg
-git push origin master
+```
+├── pom.xml                 # Maven configuration file
+├── README.md              # This file
+├── src/
+│   └── main/
+│       └── java/
+│           └── Main.java  # Main server implementation
+└── target/                # Compiled classes and JAR files
 ```
 
-Time to move on to the next stage!
+## Building the Project
 
-# Stage 2 & beyond
+```bash
+mvn clean compile
+```
 
-Note: This section is for stages 2 and beyond.
+## Running the Server
 
-1. Ensure you have `mvn` installed locally
-1. Run `./your_program.sh` to run your program, which is implemented in
-   `src/main/java/Main.java`.
-1. Commit your changes and run `git push origin master` to submit your solution
-   to CodeCrafters. Test output will be streamed to your terminal.
+After building the project with `mvn package`, run:
+
+```bash
+java -jar target/networking-http-server.jar
+```
+
+## Testing the Server
+
+Once the server is running, you should see the message:
+```
+Logs from your program will appear here!
+accepted new connection
+```
+
+The server will be listening on **port 4221**. You can test it using:
+
+### Using curl
+```bash
+curl http://localhost:4221/
+```
+
+### Using a web browser
+Open your browser and navigate to:
+```
+http://localhost:4221/
+```
+
+## Server Details
+
+- **Port:** 4221
+- **Protocol:** HTTP/1.1
+- **Main Class:** `Main`
+- **Socket Reuse:** Enabled (SO_REUSEADDR)
+
+## Development
+
+To make changes to the server:
+
+1. Edit the `src/main/java/Main.java` file
+2. Rebuild the project: `mvn clean package`
+3. Run the updated server using one of the methods above
+
+## Troubleshooting
+
+### Port Already in Use
+If you get an "Address already in use" error, either:
+- Kill the existing process using port 4221
+- Wait a few seconds and try again (the server sets SO_REUSEADDR)
+
+### Java Version Issues
+Make sure you're using Java 21 or higher:
+```bash
+java -version
+```
+
+### Maven Issues
+Verify Maven is installed and configured:
+```bash
+mvn -version
+```
+
+## Notes
+
+- This is a basic HTTP server implementation
+- The server accepts one connection at a time
+- Logs and debug information will appear in the console
+- The server socket is configured to reuse addresses to avoid binding issues during development
