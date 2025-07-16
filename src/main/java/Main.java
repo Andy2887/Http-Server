@@ -35,6 +35,16 @@ public class Main {
             String responseMessage;
             if ("/".equals(path)) {
                 responseMessage = "HTTP/1.1 200 OK\r\n\r\n";
+            } else if (path != null && path.startsWith("/echo/")) {
+                // Extract the string after "/echo/"
+                String echoString = path.substring("/echo/".length());
+                int contentLength = echoString.length();
+                
+                responseMessage = "HTTP/1.1 200 OK\r\n" +
+                                "Content-Type: text/plain\r\n" +
+                                "Content-Length: " + contentLength + "\r\n" +
+                                "\r\n" +
+                                echoString;
             } else {
                 responseMessage = "HTTP/1.1 404 Not Found\r\n\r\n";
             }
