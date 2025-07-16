@@ -43,18 +43,31 @@ public class Main {
             String requestLine = in.readLine();
             System.out.println("The received message from the client: " + requestLine);
 
-            // Parse the HTTP request line to extract the path
+            // Parse the HTTP request line to extract the method and path
+            String method = parseMethodFromRequest(requestLine);
             String path = parsePathFromRequest(requestLine);
-            System.out.println("Extracted path: " + path);
+            System.out.println("Method: " + method + ", Path: " + path);
 
             // Read and parse HTTP headers
             String userAgent = null;
+            int contentLength = 0;
             String headerLine;
             while ((headerLine = in.readLine()) != null && !headerLine.isEmpty()) {
                 System.out.println("Header: " + headerLine);
                 if (headerLine.toLowerCase().startsWith("user-agent:")) {
                     userAgent = headerLine.substring("user-agent:".length()).trim();
+                } else if (headerLine.toLowerCase().startsWith("content-length:")) {
+                    contentLength = Integer.parseInt(headerLine.substring("content-length:".length()).trim());
                 }
+            }
+
+            // Read request body if Content-Length is specified
+            String requestBody = null;
+            if (contentLength > 0) {
+                char[] buffer = new char[contentLength];
+                in.read(buffer, 0, contentLength);
+                requestBody = new String(buffer);
+                System.out.println("Request body: " + requestBody);
             }
 
             // Generate appropriate response based on the path
@@ -64,20 +77,20 @@ public class Main {
             } else if (path != null && path.startsWith("/echo/")) {
                 // Extract the string after "/echo/"
                 String echoString = path.substring("/echo/".length());
-                int contentLength = echoString.length();
+                int echoLength = echoString.length();
                 
                 responseMessage = "HTTP/1.1 200 OK\r\n" +
                                 "Content-Type: text/plain\r\n" +
-                                "Content-Length: " + contentLength + "\r\n" +
+                                "Content-Length: " + echoLength + "\r\n" +
                                 "\r\n" +
                                 echoString;
             } else if ("/user-agent".equals(path)) {
                 // Return the User-Agent header value
                 if (userAgent != null) {
-                    int contentLength = userAgent.length();
+                    int agentLength = userAgent.length();
                     responseMessage = "HTTP/1.1 200 OK\r\n" +
                                     "Content-Type: text/plain\r\n" +
-                                    "Content-Length: " + contentLength + "\r\n" +
+                                    "Content-Length: " + agentLength + "\r\n" +
                                     "\r\n" +
                                     userAgent;
                 } else {
@@ -86,7 +99,7 @@ public class Main {
             } else if (path != null && path.startsWith("/files/")) {
                 // Handle file serving
                 String filename = path.substring("/files/".length());
-                responseMessage = handleFileRequest(filename);
+                responseMessage = handleFileRequest(method, filename, requestBody);
             } else {
                 responseMessage = "HTTP/1.1 404 Not Found\r\n\r\n";
             }
@@ -104,31 +117,70 @@ public class Main {
         }
     }
 
-    private static String handleFileRequest(String filename) {
+    private static String handleFileRequest(String method, String filename, String requestBody) {
         try {
             // Create path to the file in the files directory
             Path filePath = Paths.get("files", filename);
             
-            // Check if file exists
-            if (!Files.exists(filePath)) {
-                return "HTTP/1.1 404 Not Found\r\n\r\n";
+            if ("GET".equals(method)) {
+                // Handle GET request - serve existing file
+                if (!Files.exists(filePath)) {
+                    return "HTTP/1.1 404 Not Found\r\n\r\n";
+                }
+                
+                // Read file contents
+                byte[] fileContent = Files.readAllBytes(filePath);
+                String content = new String(fileContent);
+                
+                // Create response with proper headers
+                return "HTTP/1.1 200 OK\r\n" +
+                       "Content-Type: application/octet-stream\r\n" +
+                       "Content-Length: " + fileContent.length + "\r\n" +
+                       "\r\n" +
+                       content;
+                       
+            } else if ("POST".equals(method)) {
+                // Handle POST request - create new file
+                if (requestBody == null) {
+                    return "HTTP/1.1 400 Bad Request\r\n\r\n";
+                }
+                
+                // Create files directory if it doesn't exist
+                Path filesDir = Paths.get("files");
+                if (!Files.exists(filesDir)) {
+                    Files.createDirectories(filesDir);
+                }
+                
+                // Write request body to file
+                Files.write(filePath, requestBody.getBytes());
+                
+                // Return 201 Created response
+                return "HTTP/1.1 201 Created\r\n\r\n";
+                
+            } else {
+                return "HTTP/1.1 405 Method Not Allowed\r\n\r\n";
             }
-            
-            // Read file contents
-            byte[] fileContent = Files.readAllBytes(filePath);
-            String content = new String(fileContent);
-            
-            // Create response with proper headers
-            return "HTTP/1.1 200 OK\r\n" +
-                   "Content-Type: application/octet-stream\r\n" +
-                   "Content-Length: " + fileContent.length + "\r\n" +
-                   "\r\n" +
-                   content;
                    
         } catch (IOException e) {
-            System.out.println("Error reading file: " + e.getMessage());
-            return "HTTP/1.1 404 Not Found\r\n\r\n";
+            System.out.println("Error handling file request: " + e.getMessage());
+            return "HTTP/1.1 500 Internal Server Error\r\n\r\n";
         }
+    }
+
+    private static String parseMethodFromRequest(String requestLine) {
+        if (requestLine == null || requestLine.isEmpty()) {
+            return null;
+        }
+
+        // HTTP request line format: METHOD PATH HTTP_VERSION
+        // Example: "GET /abcdefg HTTP/1.1"
+        String[] parts = requestLine.split(" ");
+        
+        if (parts.length >= 1) {
+            return parts[0]; // Return the method part
+        }
+        
+        return null;
     }
 
     private static String parsePathFromRequest(String requestLine) {

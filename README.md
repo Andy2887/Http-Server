@@ -1,23 +1,77 @@
 # HTTP Server in Java
 
-A simple HTTP server implementation in Java that listens on port 4221 and handles basic HTTP requests.
+A multi-threaded HTTP server implementation in Java that supports concurrent connections, file serving, and various HTTP endpoints.
 
-## Prerequisites
+## Tech Stack
 
-- Java 21 or higher
-- Maven 3.6 or higher
+- **Language:** Java 21
+- **Build Tool:** Maven 3.6+
+- **Architecture:** Multi-threaded server with concurrent connection handling
+- **Networking:** Java Socket API (`java.net.ServerSocket`, `java.net.Socket`)
+- **I/O:** Java NIO for file operations (`java.nio.file.*`)
+- **HTTP Protocol:** HTTP/1.1 compliant responses
 
 ## Project Structure
 
 ```
 ├── pom.xml                 # Maven configuration file
 ├── README.md              # This file
+├── files/                 # Directory for file serving (create if needed)
 ├── src/
 │   └── main/
 │       └── java/
 │           └── Main.java  # Main server implementation
 └── target/                # Compiled classes and JAR files
+    └── networking-http-server.jar
 ```
+
+## Supported Endpoints
+
+### 1. Root Endpoint
+- **Path:** `/`
+- **Method:** GET
+- **Response:** 200 OK
+- **Example:** `curl http://localhost:4221/`
+
+### 2. Echo Endpoint
+- **Path:** `/echo/{string}`
+- **Method:** GET
+- **Response:** Returns the provided string with `Content-Type: text/plain`
+- **Example:** `curl http://localhost:4221/echo/hello` → Returns "hello"
+
+### 3. User Agent Endpoint
+- **Path:** `/user-agent`
+- **Method:** GET
+- **Response:** Returns the User-Agent header value
+- **Example:** `curl -H "User-Agent: MyBot/1.0" http://localhost:4221/user-agent` → Returns "MyBot/1.0"
+
+### 4. File Serving Endpoints
+- **Path:** `/files/{filename}`
+- **Methods:** GET, POST
+- **GET:** Serves existing files from the `files/` directory
+  - **Content-Type:** `application/octet-stream`
+  - **Example:** `curl http://localhost:4221/files/test.txt`
+- **POST:** Creates new files with request body content
+  - **Response:** 201 Created on success
+  - **Example:** `curl -X POST --data "file content" http://localhost:4221/files/newfile.txt`
+
+### Error Handling
+- **404 Not Found:** For unknown paths or non-existent files
+- **400 Bad Request:** For malformed requests
+
+## Prerequisites
+
+- Java 21 or higher
+- Maven 3.6 or higher
+
+## Key Features
+
+- **Multi-threaded Architecture:** Handles multiple concurrent connections
+- **HTTP/1.1 Compliance:** Proper HTTP response formatting
+- **File Operations:** Serve existing files and create new ones
+- **Header Parsing:** Extracts and processes HTTP headers
+- **Request Body Handling:** Supports POST requests with content
+- **Socket Reuse:** Configured for development with SO_REUSEADDR
 
 ## Building the Project
 
@@ -35,23 +89,45 @@ java -jar target/networking-http-server.jar
 
 ## Testing the Server
 
-Once the server is running, you should see the message:
+Once the server is running, you should see:
 ```
 Logs from your program will appear here!
 accepted new connection
 ```
 
-The server will be listening on **port 4221**. You can test it using:
+The server listens on **port 4221**. Test the endpoints:
 
-### Using curl
+### Basic Tests
 ```bash
+# Root endpoint
 curl http://localhost:4221/
+
+# Echo endpoint
+curl http://localhost:4221/echo/hello
+
+# User-Agent endpoint
+curl -H "User-Agent: TestClient/1.0" http://localhost:4221/user-agent
 ```
 
-### Using a web browser
-Open your browser and navigate to:
+### File Operations
+```bash
+# Create a file with POST
+curl -X POST --data "Hello, World!" http://localhost:4221/files/greeting.txt
+
+# Retrieve the file with GET
+curl http://localhost:4221/files/greeting.txt
+
+# Test non-existent file (returns 404)
+curl http://localhost:4221/files/nonexistent.txt
 ```
-http://localhost:4221/
+
+### Concurrent Connection Testing
+```bash
+# Test multiple simultaneous connections
+curl http://localhost:4221/ &
+curl http://localhost:4221/echo/test &
+curl http://localhost:4221/user-agent &
+wait
 ```
 
 ## Server Details
@@ -60,37 +136,26 @@ http://localhost:4221/
 - **Protocol:** HTTP/1.1
 - **Main Class:** `Main`
 - **Socket Reuse:** Enabled (SO_REUSEADDR)
+- **Threading:** Each connection handled in separate thread
+- **File Directory:** `files/` (relative to project root)
 
-## Development
+## Implementation Details
 
-To make changes to the server:
+### Request Processing Flow
+1. **Connection Acceptance:** Server accepts incoming connections on port 4221
+2. **Threading:** Each connection is handled in a separate thread for concurrency
+3. **Request Parsing:** Extracts HTTP method, path, and headers from the request
+4. **Routing:** Matches request path to appropriate handler
+5. **Response Generation:** Creates HTTP-compliant response with proper headers
+6. **Connection Cleanup:** Closes client socket after response
 
-1. Edit the `src/main/java/Main.java` file
-2. Rebuild the project: `mvn clean package`
-3. Run the updated server using one of the methods above
+### HTTP Headers Supported
+- **Content-Type:** Set to `text/plain` for text responses, `application/octet-stream` for files
+- **Content-Length:** Always included with the exact byte count
+- **User-Agent:** Parsed from client requests for the `/user-agent` endpoint
 
-## Troubleshooting
-
-### Port Already in Use
-If you get an "Address already in use" error, either:
-- Kill the existing process using port 4221
-- Wait a few seconds and try again (the server sets SO_REUSEADDR)
-
-### Java Version Issues
-Make sure you're using Java 21 or higher:
-```bash
-java -version
-```
-
-### Maven Issues
-Verify Maven is installed and configured:
-```bash
-mvn -version
-```
-
-## Notes
-
-- This is a basic HTTP server implementation
-- The server accepts one connection at a time
-- Logs and debug information will appear in the console
-- The server socket is configured to reuse addresses to avoid binding issues during development
+### File Operations
+- **File Storage:** All files are stored in the `files/` directory
+- **File Reading:** Uses Java NIO for efficient file I/O
+- **File Creation:** POST requests create new files with request body content
+- **Error Handling:** Returns 404 for non-existent files, 201 for successful creation
