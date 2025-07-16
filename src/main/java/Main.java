@@ -7,13 +7,10 @@ import java.net.Socket;
 
 public class Main {
     public static void main(String[] args) {
-        // You can use print statements as follows for debugging, they'll be visible
-        // when running tests.
         System.out.println("Logs from your program will appear here!");
 
         try {
             ServerSocket serverSocket = new ServerSocket(4221);
-
             serverSocket.setReuseAddress(true);
 
             // create new socket object when client sent request
@@ -23,24 +20,52 @@ public class Main {
             // object to read from the socket
             BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
 
-            // object ot write to the socket
+            // object to write to the socket
             PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true);
 
-            String requestMessage, responseMessage;
+            // reading the first line of the HTTP request
+            String requestLine = in.readLine();
+            System.out.println("The received message from the client: " + requestLine);
 
-            // reading form the socket
-            requestMessage = in.readLine();
-            System.out.println("The received message from the client: " + requestMessage);
+            // Parse the HTTP request line to extract the path
+            String path = parsePathFromRequest(requestLine);
+            System.out.println("Extracted path: " + path);
 
-            responseMessage = requestMessage.toUpperCase();
+            // Generate appropriate response based on the path
+            String responseMessage;
+            if ("/".equals(path)) {
+                responseMessage = "HTTP/1.1 200 OK\r\n\r\n";
+            } else {
+                responseMessage = "HTTP/1.1 404 Not Found\r\n\r\n";
+            }
 
-            // writing to the socket
-            responseMessage = "HTTP/1.1 200 OK\r\n\r\n";
-            out.println(responseMessage);
-            System.out.println("Modified message sent to the client: " + responseMessage);
+            // Send the response
+            out.print(responseMessage);
+            out.flush();
+            System.out.println("Response sent to client: " + responseMessage.trim());
+
+            // Close the connection
+            clientSocket.close();
+            serverSocket.close();
 
         } catch (IOException e) {
             System.out.println("IOException: " + e.getMessage());
         }
+    }
+
+    private static String parsePathFromRequest(String requestLine) {
+        if (requestLine == null || requestLine.isEmpty()) {
+            return null;
+        }
+
+        // HTTP request line format: METHOD PATH HTTP_VERSION
+        // Example: "GET /abcdefg HTTP/1.1"
+        String[] parts = requestLine.split(" ");
+        
+        if (parts.length >= 2) {
+            return parts[1]; // Return the path part
+        }
+        
+        return null;
     }
 }

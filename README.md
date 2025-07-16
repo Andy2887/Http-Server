@@ -22,7 +22,7 @@ A simple HTTP server implementation in Java that listens on port 4221 and handle
 ## Building the Project
 
 ```bash
-mvn clean compile
+mvn clean package
 ```
 
 ## Running the Server
