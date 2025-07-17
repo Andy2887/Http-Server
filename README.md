@@ -67,9 +67,11 @@ A multi-threaded HTTP server implementation in Java that supports concurrent con
 ## Key Features
 
 - **Multi-threaded Architecture:** Handles multiple concurrent connections
-- **HTTP/1.1 Compliance:** Proper HTTP response formatting
+- **HTTP/1.1 Compliance:** Proper HTTP response formatting with persistent connections
+- **Persistent Connections:** Supports keep-alive connections for multiple requests
+- **Gzip Compression:** Automatic compression when supported by clients
 - **File Operations:** Serve existing files and create new ones
-- **Header Parsing:** Extracts and processes HTTP headers
+- **Header Parsing:** Extracts and processes HTTP headers (Accept-Encoding, User-Agent, etc.)
 - **Request Body Handling:** Supports POST requests with content
 - **Socket Reuse:** Configured for development with SO_REUSEADDR
 
@@ -121,13 +123,25 @@ curl http://localhost:4221/files/greeting.txt
 curl http://localhost:4221/files/nonexistent.txt
 ```
 
-### Concurrent Connection Testing
+### Compression Testing
 ```bash
-# Test multiple simultaneous connections
-curl http://localhost:4221/ &
-curl http://localhost:4221/echo/test &
-curl http://localhost:4221/user-agent &
-wait
+# Test gzip compression support
+curl -H "Accept-Encoding: gzip" http://localhost:4221/echo/hello
+
+# Test multiple encodings
+curl -H "Accept-Encoding: invalid, gzip, deflate" http://localhost:4221/echo/test
+
+# Verify compression with hexdump
+curl -H "Accept-Encoding: gzip" http://localhost:4221/echo/abc | hexdump -C
+```
+
+### Persistent Connection Testing
+```bash
+# Test multiple requests on same connection
+curl --http1.1 -v http://localhost:4221/echo/banana --next http://localhost:4221/user-agent -H "User-Agent: blueberry/apple-blueberry"
+
+# Test connection reuse
+curl --http1.1 -v http://localhost:4221/ --next http://localhost:4221/echo/persistent
 ```
 
 ## Server Details
@@ -152,6 +166,9 @@ wait
 ### HTTP Headers Supported
 - **Content-Type:** Set to `text/plain` for text responses, `application/octet-stream` for files
 - **Content-Length:** Always included with the exact byte count
+- **Content-Encoding:** Set to `gzip` when compression is applied
+- **Connection:** Handles keep-alive for persistent connections
+- **Accept-Encoding:** Parsed to determine compression support
 - **User-Agent:** Parsed from client requests for the `/user-agent` endpoint
 
 ### File Operations

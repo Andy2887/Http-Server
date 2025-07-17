@@ -35,77 +35,119 @@ public class Main {
 
     private static void handleConnection(Socket clientSocket) {
         try {
+            // Set a socket timeout to prevent hanging on persistent connections
+            clientSocket.setSoTimeout(30000); // 30 second timeout
+            
             // object to read from the socket
             BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-
-            // reading the client request
-            String requestLine = in.readLine();
-            System.out.println("The received message from the client: " + requestLine);
-
-            // Parse the HTTP request line to extract the method and path
-            String method = parseMethodFromRequest(requestLine);
-            String path = parsePathFromRequest(requestLine);
-            System.out.println("Method: " + method + ", Path: " + path);
-
-            // Read and parse HTTP headers
-            String userAgent = null;
-            String acceptEncoding = null;
-            int contentLength = 0;
-            String headerLine;
-            while ((headerLine = in.readLine()) != null && !headerLine.isEmpty()) {
-                System.out.println("Header: " + headerLine);
-                if (headerLine.toLowerCase().startsWith("user-agent:")) {
-                    userAgent = headerLine.substring("user-agent:".length()).trim();
-                } else if (headerLine.toLowerCase().startsWith("content-length:")) {
-                    contentLength = Integer.parseInt(headerLine.substring("content-length:".length()).trim());
-                } else if (headerLine.toLowerCase().startsWith("accept-encoding:")) {
-                    acceptEncoding = headerLine.substring("accept-encoding:".length()).trim();
+            
+            boolean keepAlive = true;
+            int requestCount = 0;
+            
+            System.out.println("Starting persistent connection handling for client: " + clientSocket.getRemoteSocketAddress());
+            
+            // Handle multiple requests on the same connection (HTTP/1.1 persistent connections)
+            while (keepAlive) {
+                // reading the client request
+                String requestLine = in.readLine();
+                
+                // If client closes connection, break the loop
+                if (requestLine == null || requestLine.isEmpty()) {
+                    System.out.println("Client closed connection or sent empty request");
+                    break;
                 }
-            }
+                
+                requestCount++;
+                System.out.println("Processing request #" + requestCount + " from client: " + requestLine);
 
-            // Read request body if Content-Length is specified
-            String requestBody = null;
-            if (contentLength > 0) {
-                char[] buffer = new char[contentLength];
-                in.read(buffer, 0, contentLength);
-                requestBody = new String(buffer);
-                System.out.println("Request body: " + requestBody);
-            }
+                // Parse the HTTP request line to extract the method and path
+                String method = parseMethodFromRequest(requestLine);
+                String path = parsePathFromRequest(requestLine);
+                System.out.println("Method: " + method + ", Path: " + path);
 
-            // Generate appropriate response based on the path
-            if ("/".equals(path)) {
-                sendTextResponse(clientSocket, "HTTP/1.1 200 OK\r\n\r\n");
-            } else if (path != null && path.startsWith("/echo/")) {
-                // Extract the string after "/echo/"
-                String echoString = path.substring("/echo/".length());
-                handleEchoRequest(clientSocket, echoString, acceptEncoding);
-            } else if ("/user-agent".equals(path)) {
-                // Return the User-Agent header value
-                if (userAgent != null) {
-                    int agentLength = userAgent.length();
-                    String response = "HTTP/1.1 200 OK\r\n" +
-                                    "Content-Type: text/plain\r\n" +
-                                    "Content-Length: " + agentLength + "\r\n" +
-                                    "\r\n" +
-                                    userAgent;
+                // Read and parse HTTP headers
+                String userAgent = null;
+                String acceptEncoding = null;
+                String connectionHeader = null;
+                int contentLength = 0;
+                String headerLine;
+                while ((headerLine = in.readLine()) != null && !headerLine.isEmpty()) {
+                    System.out.println("Header: " + headerLine);
+                    if (headerLine.toLowerCase().startsWith("user-agent:")) {
+                        userAgent = headerLine.substring("user-agent:".length()).trim();
+                    } else if (headerLine.toLowerCase().startsWith("content-length:")) {
+                        contentLength = Integer.parseInt(headerLine.substring("content-length:".length()).trim());
+                    } else if (headerLine.toLowerCase().startsWith("accept-encoding:")) {
+                        acceptEncoding = headerLine.substring("accept-encoding:".length()).trim();
+                    } else if (headerLine.toLowerCase().startsWith("connection:")) {
+                        connectionHeader = headerLine.substring("connection:".length()).trim();
+                    }
+                }
+
+                // Read request body if Content-Length is specified
+                String requestBody = null;
+                if (contentLength > 0) {
+                    char[] buffer = new char[contentLength];
+                    in.read(buffer, 0, contentLength);
+                    requestBody = new String(buffer);
+                    System.out.println("Request body: " + requestBody);
+                }
+
+                // Generate appropriate response based on the path
+                String connectionResponseHeader = "";
+                // If client requests connection close, include it in response
+                if (connectionHeader != null && connectionHeader.toLowerCase().contains("close")) {
+                    connectionResponseHeader = "Connection: close\r\n";
+                }
+                
+                if ("/".equals(path)) {
+                    sendTextResponse(clientSocket, "HTTP/1.1 200 OK\r\n" + connectionResponseHeader + "\r\n");
+                } else if (path != null && path.startsWith("/echo/")) {
+                    // Extract the string after "/echo/"
+                    String echoString = path.substring("/echo/".length());
+                    handleEchoRequest(clientSocket, echoString, acceptEncoding, connectionResponseHeader);
+                } else if ("/user-agent".equals(path)) {
+                    // Return the User-Agent header value
+                    if (userAgent != null) {
+                        int agentLength = userAgent.length();
+                        String response = "HTTP/1.1 200 OK\r\n" +
+                                        "Content-Type: text/plain\r\n" +
+                                        connectionResponseHeader +
+                                        "Content-Length: " + agentLength + "\r\n" +
+                                        "\r\n" +
+                                        userAgent;
+                        sendTextResponse(clientSocket, response);
+                    } else {
+                        sendTextResponse(clientSocket, "HTTP/1.1 400 Bad Request\r\n" + connectionResponseHeader + "\r\n");
+                    }
+                } else if (path != null && path.startsWith("/files/")) {
+                    // Handle file serving
+                    String filename = path.substring("/files/".length());
+                    String response = handleFileRequest(method, filename, requestBody, connectionResponseHeader);
                     sendTextResponse(clientSocket, response);
                 } else {
-                    sendTextResponse(clientSocket, "HTTP/1.1 400 Bad Request\r\n\r\n");
+                    sendTextResponse(clientSocket, "HTTP/1.1 404 Not Found\r\n" + connectionResponseHeader + "\r\n");
                 }
-            } else if (path != null && path.startsWith("/files/")) {
-                // Handle file serving
-                String filename = path.substring("/files/".length());
-                String response = handleFileRequest(method, filename, requestBody);
-                sendTextResponse(clientSocket, response);
-            } else {
-                sendTextResponse(clientSocket, "HTTP/1.1 404 Not Found\r\n\r\n");
+                
+                // Check if client wants to close the connection
+                // HTTP/1.1 defaults to keep-alive unless explicitly set to close
+                if (connectionHeader != null && connectionHeader.toLowerCase().contains("close")) {
+                    System.out.println("Client requested connection close after request #" + requestCount);
+                    keepAlive = false;
+                }
             }
 
+            System.out.println("Closing persistent connection after " + requestCount + " requests");
             // Close the connection
             clientSocket.close();
 
         } catch (IOException e) {
             System.out.println("IOException in handleConnection: " + e.getMessage());
+            try {
+                clientSocket.close();
+            } catch (IOException closeEx) {
+                System.out.println("Error closing client socket: " + closeEx.getMessage());
+            }
         }
     }
 
@@ -116,7 +158,7 @@ public class Main {
         System.out.println("Response sent to client: " + response.trim());
     }
 
-    private static void handleEchoRequest(Socket clientSocket, String echoString, String acceptEncoding) throws IOException {
+    private static void handleEchoRequest(Socket clientSocket, String echoString, String acceptEncoding, String connectionResponseHeader) throws IOException {
         boolean supportsGzip = supportsGzipEncoding(acceptEncoding);
         
         if (supportsGzip) {
@@ -127,6 +169,7 @@ public class Main {
             String headers = "HTTP/1.1 200 OK\r\n" +
                            "Content-Type: text/plain\r\n" +
                            "Content-Encoding: gzip\r\n" +
+                           connectionResponseHeader +
                            "Content-Length: " + compressedData.length + "\r\n" +
                            "\r\n";
             
@@ -141,6 +184,7 @@ public class Main {
             int echoLength = echoString.length();
             String response = "HTTP/1.1 200 OK\r\n" +
                             "Content-Type: text/plain\r\n" +
+                            connectionResponseHeader +
                             "Content-Length: " + echoLength + "\r\n" +
                             "\r\n" +
                             echoString;
@@ -156,7 +200,7 @@ public class Main {
         return baos.toByteArray();
     }
 
-    private static String handleFileRequest(String method, String filename, String requestBody) {
+    private static String handleFileRequest(String method, String filename, String requestBody, String connectionResponseHeader) {
         try {
             // Create path to the file in the files directory
             Path filePath = Paths.get("files", filename);
@@ -164,7 +208,7 @@ public class Main {
             if ("GET".equals(method)) {
                 // Handle GET request - serve existing file
                 if (!Files.exists(filePath)) {
-                    return "HTTP/1.1 404 Not Found\r\n\r\n";
+                    return "HTTP/1.1 404 Not Found\r\n" + connectionResponseHeader + "\r\n";
                 }
                 
                 // Read file contents
@@ -174,6 +218,7 @@ public class Main {
                 // Create response with proper headers
                 return "HTTP/1.1 200 OK\r\n" +
                        "Content-Type: application/octet-stream\r\n" +
+                       connectionResponseHeader +
                        "Content-Length: " + fileContent.length + "\r\n" +
                        "\r\n" +
                        content;
@@ -181,7 +226,7 @@ public class Main {
             } else if ("POST".equals(method)) {
                 // Handle POST request - create new file
                 if (requestBody == null) {
-                    return "HTTP/1.1 400 Bad Request\r\n\r\n";
+                    return "HTTP/1.1 400 Bad Request\r\n" + connectionResponseHeader + "\r\n";
                 }
                 
                 // Create files directory if it doesn't exist
@@ -194,15 +239,15 @@ public class Main {
                 Files.write(filePath, requestBody.getBytes());
                 
                 // Return 201 Created response
-                return "HTTP/1.1 201 Created\r\n\r\n";
+                return "HTTP/1.1 201 Created\r\n" + connectionResponseHeader + "\r\n";
                 
             } else {
-                return "HTTP/1.1 405 Method Not Allowed\r\n\r\n";
+                return "HTTP/1.1 405 Method Not Allowed\r\n" + connectionResponseHeader + "\r\n";
             }
                    
         } catch (IOException e) {
             System.out.println("Error handling file request: " + e.getMessage());
-            return "HTTP/1.1 500 Internal Server Error\r\n\r\n";
+            return "HTTP/1.1 500 Internal Server Error\r\n" + connectionResponseHeader + "\r\n";
         }
     }
 
