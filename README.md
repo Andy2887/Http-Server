@@ -1,6 +1,6 @@
-# HTTP Server in Java
+# HTTP Server with WebSocket Support
 
-A multi-threaded HTTP server implementation in Java that supports concurrent connections, file serving, and various HTTP endpoints.
+A multi-threaded HTTP server implementation in Java that supports concurrent connections, file serving, HTTP endpoints, and **real-time WebSocket communication** for bidirectional messaging.
 
 ## Tech Stack
 
@@ -10,6 +10,8 @@ A multi-threaded HTTP server implementation in Java that supports concurrent con
 - **Networking:** Java Socket API (`java.net.ServerSocket`, `java.net.Socket`)
 - **I/O:** Java NIO for file operations (`java.nio.file.*`)
 - **HTTP Protocol:** HTTP/1.1 compliant responses
+- **WebSocket Protocol:** RFC 6455 compliant WebSocket implementation
+- **Cryptography:** SHA-1 hashing for WebSocket handshake, Base64 encoding
 
 ## Project Structure
 
@@ -55,6 +57,35 @@ A multi-threaded HTTP server implementation in Java that supports concurrent con
   - **Response:** 201 Created on success
   - **Example:** `curl -X POST --data "file content" http://localhost:4221/files/newfile.txt`
 
+### 5. WebSocket Test Page
+- **Path:** `/websocket-test`
+- **Method:** GET
+- **Response:** HTML page for testing WebSocket functionality
+- **Example:** Visit `http://localhost:4221/websocket-test` in browser
+
+## WebSocket Support
+
+### WebSocket Endpoints
+- **Path:** Any path starting with `/ws` (e.g., `/ws`, `/ws/chat`, `/ws/room1`)
+- **Protocol:** WebSocket (RFC 6455 compliant)
+- **Features:**
+  - Real-time bidirectional communication
+  - Message broadcasting to all connected clients
+  - Ping/Pong heartbeat support
+  - Proper connection lifecycle management
+
+### WebSocket Frame Types Supported
+- **Text Frames (0x1):** For sending/receiving text messages
+- **Close Frames (0x8):** For graceful connection closure
+- **Ping Frames (0x9):** For connection health checks
+- **Pong Frames (0xA):** For responding to ping frames
+
+### WebSocket Features
+- **Automatic Broadcasting:** Messages sent by one client are broadcast to all other connected clients
+- **Echo Functionality:** Server echoes back received messages with "Echo: " prefix
+- **Welcome Messages:** New connections receive a welcome message with connection path
+- **Connection Management:** Thread-safe connection list using `CopyOnWriteArrayList`
+
 ### Error Handling
 - **404 Not Found:** For unknown paths or non-existent files
 - **400 Bad Request:** For malformed requests
@@ -68,12 +99,14 @@ A multi-threaded HTTP server implementation in Java that supports concurrent con
 
 - **Multi-threaded Architecture:** Handles multiple concurrent connections
 - **HTTP/1.1 Compliance:** Proper HTTP response formatting with persistent connections
+- **WebSocket Support:** RFC 6455 compliant real-time bidirectional communication
 - **Persistent Connections:** Supports keep-alive connections for multiple requests
 - **Gzip Compression:** Automatic compression when supported by clients
 - **File Operations:** Serve existing files and create new ones
 - **Header Parsing:** Extracts and processes HTTP headers (Accept-Encoding, User-Agent, etc.)
 - **Request Body Handling:** Supports POST requests with content
 - **Socket Reuse:** Configured for development with SO_REUSEADDR
+- **Connection Management:** Graceful handling of both HTTP and WebSocket connections
 
 ## Building the Project
 
@@ -87,6 +120,11 @@ After building the project with `mvn package`, run:
 
 ```bash
 java -jar target/networking-http-server.jar
+```
+
+You could also use the schell script:
+```bash
+./run.sh
 ```
 
 ## Testing the Server
@@ -144,35 +182,16 @@ curl --http1.1 -v http://localhost:4221/echo/banana --next http://localhost:4221
 curl --http1.1 -v http://localhost:4221/ --next http://localhost:4221/echo/persistent
 ```
 
-## Server Details
+### WebSocket Testing
+```bash
+# Test WebSocket in browser
+# Visit: http://localhost:4221/websocket-test
 
-- **Port:** 4221
-- **Protocol:** HTTP/1.1
-- **Main Class:** `Main`
-- **Socket Reuse:** Enabled (SO_REUSEADDR)
-- **Threading:** Each connection handled in separate thread
-- **File Directory:** `files/` (relative to project root)
+# Test WebSocket upgrade with curl
+curl -i -N \
+  -H "Connection: Upgrade" \
+  -H "Upgrade: websocket" \
+  -H "Sec-WebSocket-Version: 13" \
+  -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" \
+  http://localhost:4221/ws
 
-## Implementation Details
-
-### Request Processing Flow
-1. **Connection Acceptance:** Server accepts incoming connections on port 4221
-2. **Threading:** Each connection is handled in a separate thread for concurrency
-3. **Request Parsing:** Extracts HTTP method, path, and headers from the request
-4. **Routing:** Matches request path to appropriate handler
-5. **Response Generation:** Creates HTTP-compliant response with proper headers
-6. **Connection Cleanup:** Closes client socket after response
-
-### HTTP Headers Supported
-- **Content-Type:** Set to `text/plain` for text responses, `application/octet-stream` for files
-- **Content-Length:** Always included with the exact byte count
-- **Content-Encoding:** Set to `gzip` when compression is applied
-- **Connection:** Handles keep-alive for persistent connections
-- **Accept-Encoding:** Parsed to determine compression support
-- **User-Agent:** Parsed from client requests for the `/user-agent` endpoint
-
-### File Operations
-- **File Storage:** All files are stored in the `files/` directory
-- **File Reading:** Uses Java NIO for efficient file I/O
-- **File Creation:** POST requests create new files with request body content
-- **Error Handling:** Returns 404 for non-existent files, 201 for successful creation
