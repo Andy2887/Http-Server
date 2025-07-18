@@ -4,7 +4,7 @@ A multi-threaded HTTP server implementation in Java that supports concurrent con
 
 ## Tech Stack
 
-- **Language:** Java 21
+- **Language:** Java 23
 - **Build Tool:** Maven 3.6+
 - **Architecture:** Multi-threaded server with concurrent connection handling
 - **Networking:** Java Socket API (`java.net.ServerSocket`, `java.net.Socket`)
